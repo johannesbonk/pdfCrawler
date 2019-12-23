@@ -8,7 +8,7 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 #
@@ -28,6 +28,20 @@ import string
 import re
 import os
 
+# global variable declarations
+start_font = """
+            _  __  ____                    _
+  _ __   __| |/ _|/ ___|_ __ __ ___      _| | ___ _ __
+ | '_ \ / _` | |_| |   | '__/ _` \ \ /\ / | |/ _ | '__|
+ | |_) | (_| |  _| |___| | | (_| |\ V  V /| |  __| |
+ | .__/ \__,_|_|  \____|_|  \__,_| \_/\_/ |_|\___|_|
+ |_|
+
+[1] Save file in the current working directory
+[2] Enter user specific directory to save the file
+
+			"""
+
 def getURLs():
 	url = input("Input url: ")
 	domain = urlparse(url)
@@ -42,10 +56,10 @@ def getURLs():
 			url_list.append(domain + path)
 	return url_list
 
-def getRndFileNames(url_list):
+def getRndFileNames(url_list, save_dir):
 	rnd_names = []
 	for k in range(len(url_list)):
-		rnd_names.append((''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf")) # creates 20 char long random file names with .pdf tag
+		rnd_names.append(save_dir + "\\" + ''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf") # creates 20 char long random file names with .pdf tag
 	return rnd_names
 
 def generatePDFs(url_list, files):
@@ -60,7 +74,7 @@ def mergePDFs(res_file_name, files):
 	merger = PdfFileMerger(False) # create pdf-merger object (strict = False to correct zero object error)
 	for file in files:
 		merger.append(file) # append all generated files
-	merger.write(res_file_name + ".pdf") # write merged files as pdf with user specific file name
+	merger.write(res_file_name) # write merged files as pdf with user specific file name
 	merger.close() # close pdf-merger object
 	return
 
@@ -69,9 +83,41 @@ def deletePDFs(files):
 		os.remove(file) # remove all  downloaded single files (merged one remains)
 	return
 
-res_file_name = input("Please insert file name(without tag): ") # user input name for result file
+
+
+# skript entry
+print(start_font)
+usr_acc = "n" # did the user accept the inputs ? (default no)
+usr_option = "3" # == loop till valid user input
+res_file_name = "" # name of result file without file extension
+save_dir = "" # directory to save the files in
+while usr_acc != "y" :
+	usr_option = "3" # == loop till valid user input
+	while (usr_option != "1") and (usr_option != "2"):
+		usr_option = input("Enter the number of the option you want to use:")
+		if (usr_option == "1"):
+			save_dir = os.getcwd() # save at current working directory
+		elif (usr_option == "2"):
+			save_dir = input("Save as (absolute path): ") # save at specific path
+			if (os.path.isdir(save_dir)): # does the path exist ?
+				continue
+			else:
+				print("Path doesn´t exist or can´t write to directory")
+				usr_option = "3"
+		else:
+		 	print("Invalid input!")
+	file_exists = True;
+	while file_exists == True:
+		res_file_name = save_dir + "\\" + input("Please insert file name(without tag): ")  + ".pdf" # user input name for result file with path
+		if os.path.exists(res_file_name) == True:
+			print("File does already exist, please enter a new name")
+		else:
+			file_exists = False
+	print("The file will be saved as: " + res_file_name)
+	usr_acc = input("Continue? [y/n]: ")
+
 url_list = getURLs() # get all urls linked to pdf files at page
-rnd_file_names = getRndFileNames(url_list) # generate a unique name for every pdf
+rnd_file_names = getRndFileNames(url_list, save_dir) # generate a unique name for every pdf with preceding path
 generatePDFs(url_list, rnd_file_names) # download all pdfs from url and save (temporary) with generated names
 mergePDFs(res_file_name, rnd_file_names) # merge all downloaded pdfs
 deletePDFs(rnd_file_names) # delete all temporary pdfs
