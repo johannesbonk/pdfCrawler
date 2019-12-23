@@ -39,15 +39,20 @@ start_font = """
  |_|
 
 [1] Save file in the current working directory
-[2] Enter user specific directory to save the file
+[2] Enter user specific directory to save the file in
 
             """
 
+#returns url_list if successful else returns None
 def getURLs():
     url = input("Input url: ")
     domain = urlparse(url)
     domain = '{uri.scheme}://{uri.netloc}/'.format(uri=domain) # format: protocol + domain
-    html_src = urlopen(url) # get web html
+    try:
+        html_src = urlopen(url) # get web html
+    except: # exception for unvalid url or server unavailable
+        print("URL not valid or server unavailable, try again")
+        return None
     web_bin = html_src.read() # gets html binary
     web_src = web_bin.decode("utf-8") # decode src code binary to string
     potential_paths = re.findall('"([^"]*)"', web_src) # get all strings in between quotation marks
@@ -55,12 +60,16 @@ def getURLs():
     for path in potential_paths:
         if (".pdf" in path):
             url_list.append(domain + path)
-    return url_list
+    if len(url_list) < 1: # return None if no pdf links were found
+        print("No files found at: " + url + ", try again")
+        return None
+    else:
+        return url_list
 
 def getRndFileNames(url_list, save_dir):
     rnd_names = []
     for k in range(len(url_list)):
-        buf = save_dir + "\\" + ''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf" # creates 20 char long random file names with .pdf tag
+        buf = save_dir + "\\" + ''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf" # creates 20 char long random file names with .pdf extension
         if (buf in rnd_names) or (os.path.exists(buf)): # search for duplicates, if true loop once more
             k -= 1
         else:
@@ -75,8 +84,8 @@ def downloaderThread(url, path):
     return url
 
 def generatePDFs(url_list, files):
-    with ThreadPoolExecutor(max_workers = 4) as executor:
-        finished_urls = executor.map(downloaderThread, url_list, files)
+    with ThreadPoolExecutor(max_workers = 4) as executor: # generate thread pool with size 4
+        finished_urls = executor.map(downloaderThread, url_list, files) # execute 4 chapter downloads concurrently
         for url in finished_urls:
             print("Downloaded " + url + " successfully")
 
@@ -117,7 +126,7 @@ while usr_acc != "y" :
              print("Invalid input!")
     file_exists = True;
     while file_exists == True:
-        res_file_name = save_dir + "\\" + input("Please insert file name(without tag): ")  + ".pdf" # user input name for result file with path
+        res_file_name = save_dir + "\\" + input("Please insert file name(without file extension): ")  + ".pdf" # user input name for result file with path
         if os.path.exists(res_file_name) == True:
             print("File does already exist, please enter a new name")
         else:
@@ -125,7 +134,9 @@ while usr_acc != "y" :
     print("The file will be saved as: " + res_file_name)
     usr_acc = input("Continue? [y/n]: ")
 
-url_list = getURLs() # get all urls linked to pdf files at page
+url_list = None
+while url_list == None: # redo if not successful
+    url_list = getURLs() # get all urls linked to pdf files at page
 rnd_file_names = getRndFileNames(url_list, save_dir) # generate a unique name for every pdf with preceding path
 print("Downloading...")
 generatePDFs(url_list, rnd_file_names) # download all pdfs from url and save (temporary) with generated names
