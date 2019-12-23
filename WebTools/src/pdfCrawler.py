@@ -23,6 +23,7 @@
 from PyPDF2 import PdfFileMerger
 from urllib.parse import urlparse
 from urllib.request import urlopen
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import string
 import re
@@ -40,49 +41,57 @@ start_font = """
 [1] Save file in the current working directory
 [2] Enter user specific directory to save the file
 
-			"""
+            """
 
 def getURLs():
-	url = input("Input url: ")
-	domain = urlparse(url)
-	domain = '{uri.scheme}://{uri.netloc}/'.format(uri=domain) # format: protocol + domain
-	html_src = urlopen(url) # get web html
-	web_bin = html_src.read() # gets html binary
-	web_src = web_bin.decode("utf-8") # decode src code binary to string
-	potential_paths = re.findall('"([^"]*)"', web_src) # get all strings in between quotation marks
-	url_list = []  # list containing all chapter urls
-	for path in potential_paths:
-		if (".pdf" in path):
-			url_list.append(domain + path)
-	return url_list
+    url = input("Input url: ")
+    domain = urlparse(url)
+    domain = '{uri.scheme}://{uri.netloc}/'.format(uri=domain) # format: protocol + domain
+    html_src = urlopen(url) # get web html
+    web_bin = html_src.read() # gets html binary
+    web_src = web_bin.decode("utf-8") # decode src code binary to string
+    potential_paths = re.findall('"([^"]*)"', web_src) # get all strings in between quotation marks
+    url_list = []  # list containing all chapter urls
+    for path in potential_paths:
+        if (".pdf" in path):
+            url_list.append(domain + path)
+    return url_list
 
 def getRndFileNames(url_list, save_dir):
-	rnd_names = []
-	for k in range(len(url_list)):
-		rnd_names.append(save_dir + "\\" + ''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf") # creates 20 char long random file names with .pdf tag
-	return rnd_names
+    rnd_names = []
+    for k in range(len(url_list)):
+        buf = save_dir + "\\" + ''.join(random.choice(string.ascii_letters) for i in range(20)) + ".pdf" # creates 20 char long random file names with .pdf tag
+        if (buf in rnd_names) or (os.path.exists(buf)): # search for duplicates, if true loop once more
+            k -= 1
+        else:
+            rnd_names.append(buf)
+    return rnd_names
+
+def downloaderThread(url, path):
+    response = urlopen(url) # open connection to pdf link
+    file = open(path, 'wb') # generate file with name from files
+    file.write(response.read()) # write content from connection to generated file
+    file.close() # close file input stream
+    return url
 
 def generatePDFs(url_list, files):
-	for i in range(len(url_list)):
-		response = urlopen(url_list[i]) # open connection to pdf link
-		file = open(files[i], 'wb') # generate file with name from files
-		file.write(response.read()) # write content from connection to generated file
-		file.close() # close file input stream
-	return
+    with ThreadPoolExecutor(max_workers = 4) as executor:
+        finished_urls = executor.map(downloaderThread, url_list, files)
+        for url in finished_urls:
+            print("Downloaded " + url + " successfully")
 
 def mergePDFs(res_file_name, files):
-	merger = PdfFileMerger(False) # create pdf-merger object (strict = False to correct zero object error)
-	for file in files:
-		merger.append(file) # append all generated files
-	merger.write(res_file_name) # write merged files as pdf with user specific file name
-	merger.close() # close pdf-merger object
-	return
+    merger = PdfFileMerger(False) # create pdf-merger object (strict = False to correct zero object error)
+    for file in files:
+        merger.append(file) # append all generated files
+    merger.write(res_file_name) # write merged files as pdf with user specific file name
+    merger.close() # close pdf-merger object
+    return
 
 def deletePDFs(files):
-	for file in files:
-		os.remove(file) # remove all  downloaded single files (merged one remains)
-	return
-
+    for file in files:
+        os.remove(file) # remove all  downloaded single files (merged one remains)
+    return
 
 
 # skript entry
@@ -92,33 +101,35 @@ usr_option = "3" # == loop till valid user input
 res_file_name = "" # name of result file without file extension
 save_dir = "" # directory to save the files in
 while usr_acc != "y" :
-	usr_option = "3" # == loop till valid user input
-	while (usr_option != "1") and (usr_option != "2"):
-		usr_option = input("Enter the number of the option you want to use:")
-		if (usr_option == "1"):
-			save_dir = os.getcwd() # save at current working directory
-		elif (usr_option == "2"):
-			save_dir = input("Save as (absolute path): ") # save at specific path
-			if (os.path.isdir(save_dir)): # does the path exist ?
-				continue
-			else:
-				print("Path doesn´t exist or can´t write to directory")
-				usr_option = "3"
-		else:
-		 	print("Invalid input!")
-	file_exists = True;
-	while file_exists == True:
-		res_file_name = save_dir + "\\" + input("Please insert file name(without tag): ")  + ".pdf" # user input name for result file with path
-		if os.path.exists(res_file_name) == True:
-			print("File does already exist, please enter a new name")
-		else:
-			file_exists = False
-	print("The file will be saved as: " + res_file_name)
-	usr_acc = input("Continue? [y/n]: ")
+    usr_option = "3" # == loop till valid user input
+    while (usr_option != "1") and (usr_option != "2"):
+        usr_option = input("Enter the number of the option you want to use:")
+        if (usr_option == "1"):
+            save_dir = os.getcwd() # save at current working directory
+        elif (usr_option == "2"):
+            save_dir = input("Save as (absolute path): ") # save at specific path
+            if (os.path.isdir(save_dir)): # does the path exist ?
+                continue
+            else:
+                print("Path doesn´t exist or can´t write to directory")
+                usr_option = "3"
+        else:
+             print("Invalid input!")
+    file_exists = True;
+    while file_exists == True:
+        res_file_name = save_dir + "\\" + input("Please insert file name(without tag): ")  + ".pdf" # user input name for result file with path
+        if os.path.exists(res_file_name) == True:
+            print("File does already exist, please enter a new name")
+        else:
+            file_exists = False
+    print("The file will be saved as: " + res_file_name)
+    usr_acc = input("Continue? [y/n]: ")
 
 url_list = getURLs() # get all urls linked to pdf files at page
 rnd_file_names = getRndFileNames(url_list, save_dir) # generate a unique name for every pdf with preceding path
+print("Downloading...")
 generatePDFs(url_list, rnd_file_names) # download all pdfs from url and save (temporary) with generated names
+print("Merging...")
 mergePDFs(res_file_name, rnd_file_names) # merge all downloaded pdfs
 deletePDFs(rnd_file_names) # delete all temporary pdfs
-print("Created " + res_file_name + ".pdf successfully!")
+print("Created " + res_file_name + " successfully!")
